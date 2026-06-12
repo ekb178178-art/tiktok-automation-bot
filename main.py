@@ -20,15 +20,6 @@ ACCESS_TOKEN = os.environ.get("TIKTOK_ACCESS_TOKEN", "")
 
 TIKTOK_API_BASE = "https://open.tiktokapis.com/v2"
 
-DM_TEXT = (
-    "Привет! 👋 Как и обещал, лови ссылку на нашего бота.\n\n"
-    "Твои любимые зарубежные сервисы в разы дешевле уже внутри. "
-    "Запускай бота и забирай доступ:\n"
-    "https://t.me/ConnectShop_ai_bot\n\n"
-    "💡 Важно: если ссылка не нажимается (в ТикТоке такое бывает), "
-    "просто скопируй это сообщение, отправь себе в «Избранное» в Телеграме и перейди оттуда."
-)
-
 COMMENT_REPLY_TEXT = (
     "Уже отправил в ЛС! Проверяй директ 🚀 "
     "Если у тебя закрытый профиль — напиши мне в личку слово НЕЙРО"
@@ -37,7 +28,7 @@ COMMENT_REPLY_TEXT = (
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="TikTok Automation Webhook")
+app = FastAPI(title="TikTok Automation Webhook - Comment Only")
 
 
 # ---------------------------------------------------------------------------
@@ -69,30 +60,12 @@ async def reply_to_comment(video_id: str, comment_id: str, text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# TikTok API: send DM
-# ---------------------------------------------------------------------------
-async def send_dm(recipient_open_id: str, text: str) -> None:
-    url = f"{TIKTOK_API_BASE}/message/send/"
-    payload = {
-        "to_user_open_id": recipient_open_id,
-        "message_type": "TEXT",
-        "content": {"text": text},
-    }
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(url, headers=_auth_headers(), json=payload)
-    if response.status_code != 200:
-        logger.error("send_dm failed: %s %s", response.status_code, response.text)
-    else:
-        logger.info("DM sent to open_id=%s", recipient_open_id)
-
-
-# ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
 async def handle_comment(event: dict) -> None:
     """
     Triggered when a new comment is posted.
-    Checks for the trigger word and fires reply + DM.
+    Checks for the trigger word and replies to it.
     """
     comment_text: str = event.get("comment_text", "")
     if TRIGGER_WORD not in comment_text.lower():
@@ -104,27 +77,8 @@ async def handle_comment(event: dict) -> None:
 
     logger.info("Trigger word detected in comment from open_id=%s", user_open_id)
 
-    # Fire both actions concurrently
-    import asyncio
-    await asyncio.gather(
-        reply_to_comment(video_id, comment_id, COMMENT_REPLY_TEXT),
-        send_dm(user_open_id, DM_TEXT),
-    )
-
-
-async def handle_direct_message(event: dict) -> None:
-    """
-    Triggered when a user sends a DM.
-    Checks for the trigger word and replies with the bot link.
-    """
-    message_text: str = event.get("message", {}).get("text", "")
-    if TRIGGER_WORD not in message_text.lower():
-        return
-
-    sender_open_id: str = event.get("sender_open_id", "")
-    logger.info("Trigger word detected in DM from open_id=%s", sender_open_id)
-
-    await send_dm(sender_open_id, DM_TEXT)
+    # Only send comment reply
+    await reply_to_comment(video_id, comment_id, COMMENT_REPLY_TEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -163,8 +117,6 @@ async def receive_webhook(request: Request) -> dict:
 
     if event_type == "comment.create" and data:
         await handle_comment(data)
-    elif event_type == "message.receive" and data:
-        await handle_direct_message(data)
     else:
         logger.info("Unhandled event type: %s", event_type)
 

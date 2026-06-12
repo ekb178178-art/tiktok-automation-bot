@@ -84,7 +84,9 @@ async def handle_comment(event: dict) -> None:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+@app.get("/webhook", response_class=PlainTextResponse)
 @app.get("/", response_class=PlainTextResponse)
+@app.head("/webhook")
 @app.head("/")
 async def verify_webhook(request: Request) -> Response:
     """
@@ -96,6 +98,7 @@ async def verify_webhook(request: Request) -> Response:
         logger.info("Webhook verification challenge received.")
         return PlainTextResponse(content=challenge)
     return PlainTextResponse(content="OK")
+
 
 
 @app.post("/webhook")
